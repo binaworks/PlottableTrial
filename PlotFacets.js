@@ -1,5 +1,7 @@
-function PlotFacets() {var colorScale = new Plottable.Scales.Color();
+function PlotFacets() {
+    var colorScale = new Plottable.Scales.Color();
     var xScale = new Plottable.Scales.Linear();
+    var yScale = new Plottable.Scales.Linear();
     var xAxis = new Plottable.Axes.Numeric(xScale, "bottom");
 
     var yScale_senate = new Plottable.Scales.Linear();
@@ -23,6 +25,14 @@ function PlotFacets() {var colorScale = new Plottable.Scales.Color();
         [label_house, yAxis_house, plot_house],
         [null, null, xAxis]
     ]);
+
+    function createPlot(json) {
+        var plotScale = new Plottable.Scales.Linear(),
+            barPlot = new Plottable.Plots.Bar()
+            .x(function(d) { return d.start_year; }, plotScale)
+            .y(function(d) { return d.democrats - d.republicans; }, yScale_house)
+            .attr("fill", function(d) { return d.democrats - d.republicans > 0 ? "#0000FF" : "#FF0000" }, colorScale);
+    }
 
     function loadData(url, plot) {
         d3.json(url, function(error, json) {
