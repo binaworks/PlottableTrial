@@ -1,30 +1,60 @@
 function PlotLcia() {
-    var xScale = new Plottable.Scales.Category().domain([115,150]);
+
     var lciaResults = [];
-    var lciaMethods = [];
-    var scenarios = [];
-    var processes = [];
-    var tableComponents = [];
-    var yAxisFormatter = d3.format("^.2g");
+    var lciaResultMap;
+    var lciaMethodMap;
+    var scenarioMap;
+    var processMap;
+
+    var axisFormatter = d3.format("^.2g");
+    var scenarioIDs = [1016, 1017, 1018, 1019];
+    var processIDs = [115, 150];
+    var lciaMethodIDs = [1,2];
+    var yScale = new Plottable.Scales.Category();
+    var yAxisScale = new Plottable.Scales.Category();
+    var xScales = d3.map();
 
     loadData();
 
     function displayResults(results) {
         lciaResults = d3.merge(results);
+        lciaResultMap = d3.nest()
+            .key(function(d) { return d.lciaMethodID; })
+            .key(function(d) { return d.scenarioID; })
+            .map(lciaResults, d3.map);
+
         plotData()
     }
 
     function loadResults() {
-
-        queue()
-            .defer(d3.json,"http://kbcalr.isber.ucsb.edu/api/scenarios/1/processes/115/lciaresults")
-            .defer(d3.json,"http://kbcalr.isber.ucsb.edu/api/scenarios/1/processes/150/lciaresults")
-            .defer(d3.json,"http://kbcalr.isber.ucsb.edu/api/scenarios/2/processes/115/lciaresults")
-            .defer(d3.json,"http://kbcalr.isber.ucsb.edu/api/scenarios/2/processes/150/lciaresults")
-            .awaitAll(function(error, results) {
-                if (error) return console.error(error);
-                displayResults(results);
+        var q = queue();
+        scenarioIDs.forEach( function (s) {
+            processIDs.forEach( function (p) {
+                var url = "http://kbcalr.isber.ucsb.edu/api/scenarios/" + s
+                        + "/processes/" + p + "/lciaresults";
+                q.defer(d3.json,url);
             });
+        });
+        q.awaitAll(function(error, results) {
+            if (error) return console.error(error);
+            displayResults(results);
+        });
+    }
+
+    function filter(data, idName, idValues) {
+        var ids = d3.set(idValues);
+        return data.filter( function (d) {
+            return ids.has(d[idName]);
+        });
+    }
+
+    function processScales() {
+        var processNames;
+        yScale.domain(processIDs);
+        processNames = processIDs.map( function (p) {
+            return processMap.get(p).name;
+        });
+        yAxisScale.domain(processNames);
     }
 
     function loadData() {
@@ -34,14 +64,48 @@ function PlotLcia() {
             .defer(d3.json,"http://kbcalr.isber.ucsb.edu/api/scenarios")
             .await(function(error, m, p, s) {
                 if (error) return console.error(error);
-                lciaMethods = m;
-                processes = p;
-                scenarios = s;
+                lciaMethodMap = d3.map(m, function(d) { return d.lciaMethodID; });
+                processMap = d3.map(p, function(d) { return d.processID; });
+                scenarioMap = d3.map(s, function(d) { return d.scenarioID; });
+                processScales();
                 loadResults();
             });
     }
 
-    function getProcessCategory(r) {
+
+    function createMethodLabelRow() {
+        var row = [null];
+        lciaMethodIDs.forEach( function(d) {
+            row.push( new Plottable.Components.AxisLabel(lciaMethodMap.get(d).name));
+        });
+        row.push(null);
+        return row;
+    }
+
+    function createScenarioRows(s) {
+        var row1, row2;
+
+        row1 = [new Plottable.Components.AxisLabel(scenarioMap.get(s).name).yAlignment("center")];
+        lciaMethodIDs.forEach( function(m) {
+            row1.push( plotResults(s, m));
+        });
+        row1.push(createYAxis());
+
+        row2 = [null];
+        lciaMethodIDs.forEach( function(m) {
+            var xAxis = new Plottable.Axes.Numeric(xScales.get(m), "bottom").formatter(axisFormatter);
+            row2.push( xAxis);
+        });
+        row2.push(null);
+
+        return [row1, row2];
+    }
+
+    function createYAxis() {
+        return new Plottable.Axes.Category(yAxisScale, "right");
+    }
+
+    function getProcessID(r) {
         return r.lciaScore[0].processID;
     }
 
@@ -62,78 +126,42 @@ function PlotLcia() {
         return extent;
     }
 
-    function plotScenarioResults(mds, domain, s, tableRows) {
-        var xAxis = new Plottable.Axes.Category(xScale, "bottom");
-        var yScale = new Plottable.Scales.Linear().domain(domain);
-        var yAxis = new Plottable.Axes.Numeric(yScale, "left").formatter(yAxisFormatter);
-        var ds =  mds.filter( function(d) {
-            return d["scenarioID"] === s.scenarioID;
-        });
-        var plot = new Plottable.Plots.Bar();
+    function plotResults(s, m) {
+        var plot = new Plottable.Plots.Bar(),
+            data = lciaResultMap.get(m).get(s);
 
-        //yScale.tickGenerator( function () {
-        //    return ds.map(getResult);
-        //});
-
-        plot.x(getProcessCategory, xScale)
-            .y(getResult, yScale)
+        plot.x(getResult, xScales.get(m))
+            .y(getProcessID, yScale)
             .labelsEnabled(true)
-            .labelFormatter(yAxisFormatter);
+            .labelFormatter(axisFormatter);
 
-        plot.addDataset(new Plottable.Dataset(ds));
-        tableRows[0].push(yAxis, plot);
-        tableRows[1].push(null, xAxis);
+        plot.addDataset(new Plottable.Dataset(data));
+        return plot;
     }
 
-    function plotMethodResults(m) {
-
-        var ds =  lciaResults.filter( function(d) {
-            return d["lciaMethodID"] === m.lciaMethodID;
+    function createXScales() {
+        lciaMethodIDs.forEach( function (d) {
+            var m = lciaResultMap.get(d.toString()).values();
+            var dom = getDomain(m);
+            var scale = new Plottable.Scales.Linear().domain(dom);
+            xScales.set(d, scale);
         });
-        var domain = getDomain(ds);
-        var tableRows = [[],[]];
-
-        scenarios.forEach( function(s) {
-            plotScenarioResults(ds, domain, s, tableRows);
-        });
-        tableComponents.push(tableRows[0], tableRows[1]);
-
     }
-
-    //function createLegend() {
-    //    var scale = new Plottable.Scales.Category();
-    //    var legend = new Plottable.Components.Legend(scale);
-    //    var domain = xScale.domain().map( function (d) {
-    //        var name;
-    //        processes.forEach( function (p) {
-    //            if (p.processID == d) {
-    //                name = p.name;
-    //            }
-    //        });
-    //        return name;
-    //    });
-    //    scale.domain(domain);
-    //    scale.range(xScale.domain());
-    //    legend.yAlignment("top");
-    //    legend.width(400);
-    //    return legend;
-    //}
 
     function plotData() {
-        var chart
-            //, legend, tc
-            ;
+        var chart;
+        var innerTable = [];
 
-        lciaMethods.forEach(plotMethodResults);
-        //legend = createLegend();
-        //tc = [[legend]];
-        //tc = tc.concat(tableComponents);
-        chart = new Plottable.Components.Table( tableComponents);
+        createXScales();
+        innerTable.push(createMethodLabelRow());
+        scenarioIDs.forEach( function (s) {
+            innerTable = innerTable.concat(createScenarioRows(s));
+        });
+        chart = new Plottable.Components.Table( innerTable);
         d3.select("#chart")
-            .attr("height", lciaMethods.length * 200)
-            .attr("width", scenarios.length * 350);
+            .attr("height", scenarioIDs.length * 300)
+            .attr("width", 900);
         chart.renderTo("#chart");
-        d3.selectAll(".tick-label").style("visibility", "visible");
     }
 
 }
