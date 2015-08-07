@@ -1,5 +1,5 @@
 function PlotLcia() {
-    var xScale = new Plottable.Scales.Category();
+    var xScale = new Plottable.Scales.Category().domain([115,150]);
     var lciaResults = [];
     var lciaMethods = [];
     var scenarios = [];
@@ -42,7 +42,7 @@ function PlotLcia() {
     }
 
     function getProcessCategory(r) {
-        return r.lciaScore[0].processID.toString();
+        return r.lciaScore[0].processID;
     }
 
     function getResult(r) {
@@ -65,18 +65,20 @@ function PlotLcia() {
     function plotScenarioResults(mds, domain, s, tableRows) {
         var xAxis = new Plottable.Axes.Category(xScale, "bottom");
         var yScale = new Plottable.Scales.Linear().domain(domain);
-        var yAxis = new Plottable.Axes.Numeric(yScale, "left").formatter(yAxisFormatter).showEndTickLabels(true);
+        var yAxis = new Plottable.Axes.Numeric(yScale, "left").formatter(yAxisFormatter);
         var ds =  mds.filter( function(d) {
             return d["scenarioID"] === s.scenarioID;
         });
         var plot = new Plottable.Plots.Bar();
 
-        yScale.tickGenerator( function () {
-            return ds.map(getResult);
-        });
+        //yScale.tickGenerator( function () {
+        //    return ds.map(getResult);
+        //});
 
         plot.x(getProcessCategory, xScale)
-            .y(getResult, yScale);
+            .y(getResult, yScale)
+            .labelsEnabled(true)
+            .labelFormatter(yAxisFormatter);
 
         plot.addDataset(new Plottable.Dataset(ds));
         tableRows[0].push(yAxis, plot);
@@ -98,14 +100,38 @@ function PlotLcia() {
 
     }
 
+    //function createLegend() {
+    //    var scale = new Plottable.Scales.Category();
+    //    var legend = new Plottable.Components.Legend(scale);
+    //    var domain = xScale.domain().map( function (d) {
+    //        var name;
+    //        processes.forEach( function (p) {
+    //            if (p.processID == d) {
+    //                name = p.name;
+    //            }
+    //        });
+    //        return name;
+    //    });
+    //    scale.domain(domain);
+    //    scale.range(xScale.domain());
+    //    legend.yAlignment("top");
+    //    legend.width(400);
+    //    return legend;
+    //}
+
     function plotData() {
-        var chart;
+        var chart
+            //, legend, tc
+            ;
 
         lciaMethods.forEach(plotMethodResults);
+        //legend = createLegend();
+        //tc = [[legend]];
+        //tc = tc.concat(tableComponents);
         chart = new Plottable.Components.Table( tableComponents);
         d3.select("#chart")
             .attr("height", lciaMethods.length * 200)
-            .attr("width", scenarios.length * 200);
+            .attr("width", scenarios.length * 350);
         chart.renderTo("#chart");
         d3.selectAll(".tick-label").style("visibility", "visible");
     }
