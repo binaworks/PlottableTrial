@@ -8,11 +8,12 @@ function PlotLcia() {
 
     var axisFormatter = d3.format("^.2g");
     var scenarioIDs = [1016, 1017, 1018, 1019];
-    var processIDs = [115, 150];
-    var lciaMethodIDs = [1,2];
+    var processIDs = [115, 150, 111];
+    var lciaMethodIDs = [1,2,3];
     var yScale = new Plottable.Scales.Category();
     var yAxisScale = new Plottable.Scales.Category();
     var xScales = d3.map();
+    var colorScale = new Plottable.Scales.Color();
 
     loadData();
 
@@ -92,11 +93,11 @@ function PlotLcia() {
         row1.push(createYAxis());
 
         row2 = [null];
-        lciaMethodIDs.forEach( function(m) {
-            var xAxis = new Plottable.Axes.Numeric(xScales.get(m), "bottom").formatter(axisFormatter);
-            row2.push( xAxis);
-        });
-        row2.push(null);
+        //lciaMethodIDs.forEach( function(m) {
+        //    var xAxis = new Plottable.Axes.Numeric(xScales.get(m), "bottom").formatter(axisFormatter);
+        //    row2.push( xAxis);
+        //});
+        //row2.push(null);
 
         return [row1, row2];
     }
@@ -113,25 +114,28 @@ function PlotLcia() {
         return r["total"];
     }
 
-    function getDomain(ds) {
+    function getMethodDomain(data) {
         var extent = [0,0];
-        ds.forEach( function(r) {
-            var val = getResult(r);
-            if (val < extent[0]) {
-                extent[0] = val;
-            } else if (val > extent[1]) {
-                extent[1] = val;
-            }
+        data.forEach( function(d) {
+            d.forEach( function (r) {
+                var val = getResult(r);
+                if (val < extent[0]) {
+                    extent[0] = val;
+                } else if (val > extent[1]) {
+                    extent[1] = val;
+                }
+            });
         });
         return extent;
     }
 
     function plotResults(s, m) {
-        var plot = new Plottable.Plots.Bar(),
+        var plot = new Plottable.Plots.Bar("horizontal"),
             data = lciaResultMap.get(m).get(s);
 
         plot.x(getResult, xScales.get(m))
             .y(getProcessID, yScale)
+            .attr("fill", colorScale.scale(m))
             .labelsEnabled(true)
             .labelFormatter(axisFormatter);
 
@@ -142,8 +146,9 @@ function PlotLcia() {
     function createXScales() {
         lciaMethodIDs.forEach( function (d) {
             var m = lciaResultMap.get(d.toString()).values();
-            var dom = getDomain(m);
-            var scale = new Plottable.Scales.Linear().domain(dom);
+            var dom = getMethodDomain(m);
+            var scale = new Plottable.Scales.Linear();
+            scale.domain(dom);
             xScales.set(d, scale);
         });
     }
@@ -152,6 +157,7 @@ function PlotLcia() {
         var chart;
         var innerTable = [];
 
+        colorScale.domain(lciaMethodIDs);
         createXScales();
         innerTable.push(createMethodLabelRow());
         scenarioIDs.forEach( function (s) {
@@ -159,7 +165,7 @@ function PlotLcia() {
         });
         chart = new Plottable.Components.Table( innerTable);
         d3.select("#chart")
-            .attr("height", scenarioIDs.length * 300)
+            .attr("height", scenarioIDs.length * 150)
             .attr("width", 900);
         chart.renderTo("#chart");
     }
